@@ -512,8 +512,12 @@ else
 // ─────────────────────────────────────────────────────────────────────────────
 alertcondition(bslSweep,
      title   = "BSL Sweep",
-     message = "🔴 BSL Sweep | {{ticker}} [{{interval}}] | Price: {{close}}\nHigh swept Asian High & closed below — watch for Bear MSS.")
+     message = "🔴 SW↑ BSL Sweep | {{ticker}} [{{interval}}] | Price: {{close}}\nHigh swept Asian High & closed below — watch for Bear MSS.")
 
 alertcondition(sslSweep,
      title   = "SSL Sweep",
-     message = "🟢 SSL Sweep | {{ticker}} [{{interval}}] | Price: {{close}}\nLow swept Asian Low & closed above — watch for Bull MSS.")
+     message = "🟢 SW↓ SSL Sweep | {{ticker}} [{{interval}}] | Price: {{close}}\nLow swept Asian Low & closed above — watch for Bull MSS.")
+
+alertcondition(bslSweep or sslSweep,
+     title   = "SW Alert (BSL or SSL)",
+     message = "⚡ SW Sweep | {{ticker}} [{{interval}}] | Price: {{close}}\nSweep detected — watch for MSS.")

@@ -69,6 +69,17 @@ export default {
     // Read the alert message TradingView sent
     const text = await request.text();
 
+    // Only forward SW sweep alerts — ignore anything else
+    const isSweepAlert =
+      text.includes('SW↑') ||
+      text.includes('SW↓') ||
+      text.includes('BSL Sweep') ||
+      text.includes('SSL Sweep');
+
+    if (!isSweepAlert) {
+      return new Response('Ignored: not a sweep alert', { status: 200 });
+    }
+
     // Build Telegram API URL using the bot token stored as a secret
     const telegramUrl =
       `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`;
