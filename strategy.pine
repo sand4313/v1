@@ -506,18 +506,13 @@ else
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ALERTS
-// TradingView will fire these when the conditions are true.
-// In TradingView → right-click chart → "Add Alert" → pick the condition below.
-// Set the "Webhook URL" to your Cloudflare Worker URL (see webhook/ folder).
+// strategy() scripts do not support alertcondition() — use alert() instead.
+// In TradingView → right-click chart → "Add Alert"
+//   Condition: pick this strategy → "Any alert() function call"
+//   Notifications: enable Webhook URL → paste your Cloudflare Worker URL.
 // ─────────────────────────────────────────────────────────────────────────────
-alertcondition(bslSweep,
-     title   = "BSL Sweep",
-     message = "🔴 SW↑ BSL Sweep | {{ticker}} [{{interval}}] | Price: {{close}}\nHigh swept Asian High & closed below — watch for Bear MSS.")
+if bslSweep
+    alert("🔴 SW↑ BSL Sweep | " + syminfo.ticker + " [" + timeframe.period + "] | Price: " + str.tostring(close, "#.##") + "\nHigh swept Asian High & closed below — watch for Bear MSS.", alert.freq_once_per_bar_close)
 
-alertcondition(sslSweep,
-     title   = "SSL Sweep",
-     message = "🟢 SW↓ SSL Sweep | {{ticker}} [{{interval}}] | Price: {{close}}\nLow swept Asian Low & closed above — watch for Bull MSS.")
-
-alertcondition(bslSweep or sslSweep,
-     title   = "SW Alert (BSL or SSL)",
-     message = "⚡ SW Sweep | {{ticker}} [{{interval}}] | Price: {{close}}\nSweep detected — watch for MSS.")
+if sslSweep
+    alert("🟢 SW↓ SSL Sweep | " + syminfo.ticker + " [" + timeframe.period + "] | Price: " + str.tostring(close, "#.##") + "\nLow swept Asian Low & closed above — watch for Bull MSS.", alert.freq_once_per_bar_close)
