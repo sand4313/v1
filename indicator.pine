@@ -1,0 +1,306 @@
+//@version=6
+indicator(
+     "Alt/BTC Zone Confluence",
+     overlay=true,
+     max_boxes_count=300,
+     max_lines_count=500,
+     max_labels_count=300
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INPUTS
+// ─────────────────────────────────────────────────────────────────────────────
+grpCore = "Core"
+tz      = input.string("America/New_York", "Timezone", group=grpCore)
+allowTF = input.bool(true, "Only run on 15m–60m charts", group=grpCore)
+
+grpSess      = "Sessions (NY time)"
+asianStartH  = input.int(20, "Asian start hour",  minval=0, maxval=23, group=grpSess)
+asianEndH    = input.int(0,  "Asian end hour",    minval=0, maxval=23, group=grpSess)
+londonStartH = input.int(2,  "London start hour", minval=0, maxval=23, group=grpSess)
+londonEndH   = input.int(5,  "London end hour",   minval=0, maxval=23, group=grpSess)
+nyStartH     = input.int(8,  "NY start hour",     minval=0, maxval=23, group=grpSess)
+nyEndH       = input.int(11, "NY end hour",       minval=0, maxval=23, group=grpSess)
+shadeKZ      = input.bool(true,  "Shade London/NY windows",              group=grpSess)
+asianMinPct  = input.float(0.8,  "Min Asian range (% of price, 0=off)",  minval=0.0, maxval=5.0, step=0.1, group=grpSess)
+
+grpRatio    = "BTC Ratio Filter"
+btcTicker   = input.string("BINANCE:BTCUSDT", "BTC ticker",                        group=grpRatio)
+useRatio    = input.bool(true,  "Enable ratio filter",                              group=grpRatio)
+ratioLen    = input.int(50,     "Z-score lookback (bars)",   minval=10, maxval=200, group=grpRatio)
+ratioThresh = input.float(2.5,  "Z-score extreme threshold", minval=1.0, maxval=5.0, step=0.1, group=grpRatio)
+
+grpZones    = "Zones"
+pivLen      = input.int(5,   "Pivot swing length", minval=2, maxval=20,    group=grpZones)
+maxZones    = input.int(30,  "Max zones kept",     minval=5, maxval=200,   group=grpZones)
+extendBoxes = input.int(250, "Extend boxes (bars)", minval=20, maxval=5000, group=grpZones)
+
+grpCandles  = "Candle Patterns"
+pbWickRatio = input.float(2.0, "Pin bar: min wick/body ratio", minval=1.0, maxval=10.0, step=0.1, group=grpCandles)
+engulfPct   = input.float(0.5, "Engulf: min body coverage (0–1)", minval=0.1, maxval=1.0, step=0.05, group=grpCandles)
+
+grpViz     = "Visuals"
+showAsian  = input.bool(true, "Plot Asian High/Low",  group=grpViz)
+showLondon = input.bool(true, "Plot London High/Low", group=grpViz)
+showSigs   = input.bool(true, "Plot entry signals",   group=grpViz)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS  (ported from TJR)
+// ─────────────────────────────────────────────────────────────────────────────
+clamp(x, lo, hi) => math.max(lo, math.min(hi, x))
+
+f_inWindow(startH, endH, tz) =>
+    int h   = hour(time, tz)
+    int m   = minute(time, tz)
+    int cur = h * 60 + m
+    int s   = startH * 60
+    int e   = endH   * 60
+    s <= e ? (cur >= s and cur < e) : (cur >= s or cur < e)
+
+dayId() =>
+    int y  = year(time, tz)
+    int mo = month(time, tz)
+    int da = dayofmonth(time, tz)
+    y * 10000 + mo * 100 + da
+
+tfOK = not allowTF or (timeframe.isminutes and timeframe.multiplier >= 15 and timeframe.multiplier <= 60)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SESSIONS
+// ─────────────────────────────────────────────────────────────────────────────
+inAsian  = f_inWindow(asianStartH,  asianEndH,  tz)
+inLondon = f_inWindow(londonStartH, londonEndH, tz)
+inNY     = f_inWindow(nyStartH,     nyEndH,     tz)
+inKZ     = inLondon or inNY
+
+bgcolor(shadeKZ and inLondon ? color.new(color.blue, 92) : na, title="London window")
+bgcolor(shadeKZ and inNY     ? color.new(color.red,  92) : na, title="NY window")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ASIAN RANGE  (ported from TJR, includes min-range filter)
+// ─────────────────────────────────────────────────────────────────────────────
+var float asianHi     = na
+var float asianLo     = na
+var float asianHiRef  = na
+var float asianLoRef  = na
+var int   asianRefDay = na
+
+if inAsian
+    asianHi := na(asianHi) ? high : math.max(asianHi, high)
+    asianLo := na(asianLo) ? low  : math.min(asianLo, low)
+
+if (not inAsian) and inAsian[1] and not na(asianHi) and not na(asianLo)
+    asianHiRef  := asianHi
+    asianLoRef  := asianLo
+    asianRefDay := dayId()
+    asianHi     := na
+    asianLo     := na
+
+asianRangePct = (not na(asianHiRef) and asianLoRef > 0) ? ((asianHiRef - asianLoRef) / asianLoRef) * 100.0 : 0.0
+hasAsianRef   = not na(asianHiRef) and not na(asianLoRef) and asianRefDay == dayId() and (asianMinPct <= 0.0 or asianRangePct >= asianMinPct)
+
+plot(showAsian ? asianHiRef : na, "Asian High", color=color.new(color.fuchsia, 40), linewidth=1, style=plot.style_line)
+plot(showAsian ? asianLoRef : na, "Asian Low",  color=color.new(color.fuchsia, 40), linewidth=1, style=plot.style_line)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LONDON RANGE  (NY session trades often target London extremes)
+// ─────────────────────────────────────────────────────────────────────────────
+var float londonHi    = na
+var float londonLo    = na
+var float londonHiRef = na
+var float londonLoRef = na
+
+if inLondon
+    londonHi := na(londonHi) ? high : math.max(londonHi, high)
+    londonLo := na(londonLo) ? low  : math.min(londonLo, low)
+
+if (not inLondon) and inLondon[1] and not na(londonHi) and not na(londonLo)
+    londonHiRef := londonHi
+    londonLoRef := londonLo
+    londonHi    := na
+    londonLo    := na
+
+plot(showLondon ? londonHiRef : na, "London High", color=color.new(color.teal, 40), linewidth=1, style=plot.style_line)
+plot(showLondon ? londonLoRef : na, "London Low",  color=color.new(color.teal, 40), linewidth=1, style=plot.style_line)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BTC RATIO FILTER
+// Primary use: safety gate only — blocks longs when alt is collapsing vs BTC
+// and blocks shorts when alt is ripping vs BTC.
+// ratioRecovery signals are bonus confluence: ratio crossing back from an
+// extreme is the strongest mean-reversion moment; use these to weight entries.
+// ─────────────────────────────────────────────────────────────────────────────
+btcClose  = request.security(btcTicker, timeframe.period, close, barmerge.gaps_off, barmerge.lookahead_off)
+ratio     = (not na(btcClose) and btcClose > 0) ? close / btcClose : na
+
+ratioMean = ta.sma(ratio, ratioLen)
+ratioStd  = ta.stdev(ratio, ratioLen)
+ratioZ    = (not na(ratio) and not na(ratioMean) and ratioStd > 0) ? (ratio - ratioMean) / ratioStd : 0.0
+
+// Safety gates
+ratioSafeLong  = (not useRatio) or ratioZ > -ratioThresh  // alt not collapsing vs BTC
+ratioSafeShort = (not useRatio) or ratioZ <  ratioThresh  // alt not ripping vs BTC
+
+// Bonus: recovery signals (cross back from extreme = strongest reversion moment)
+ratioRecoveryLong  = useRatio and ratioZ[1] <= -ratioThresh and ratioZ >  -ratioThresh
+ratioRecoveryShort = useRatio and ratioZ[1] >=  ratioThresh and ratioZ <   ratioThresh
+
+// Z-score available in Data Window; not plotted on price chart (wrong scale)
+plot(ratioZ, "Ratio Z-score", display=display.none)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PIVOT ZONES
+// Each confirmed swing high creates a short (resistance) zone.
+// Each confirmed swing low creates a long (support) zone.
+// Zone width = ±0.5 ATR around the pivot to give price room to wick.
+// ─────────────────────────────────────────────────────────────────────────────
+atr   = ta.atr(14)
+ph    = ta.pivothigh(high, pivLen, pivLen)
+pl    = ta.pivotlow(low,   pivLen, pivLen)
+zHalf = atr * 0.5
+
+var float[] zTop  = array.new_float()
+var float[] zBot  = array.new_float()
+var int[]   zDir  = array.new_int()
+var bool[]  zUsed = array.new_bool()
+var box[]   zBox  = array.new_box()
+
+f_trimZones() =>
+    while array.size(zTop) > maxZones
+        box bx = array.shift(zBox)
+        if not na(bx)
+            box.delete(bx)
+        array.shift(zTop)
+        array.shift(zBot)
+        array.shift(zDir)
+        array.shift(zUsed)
+
+if not na(ph)
+    float top = ph + zHalf
+    float bot = ph - zHalf
+    array.push(zTop,  top)
+    array.push(zBot,  bot)
+    array.push(zDir,  -1)
+    array.push(zUsed, false)
+    array.push(zBox, box.new(bar_index - pivLen, top, bar_index + extendBoxes, bot,
+         bgcolor=color.new(color.red, 88), border_color=color.new(color.red, 60), border_width=1))
+    f_trimZones()
+
+if not na(pl)
+    float top = pl + zHalf
+    float bot = pl - zHalf
+    array.push(zTop,  top)
+    array.push(zBot,  bot)
+    array.push(zDir,  1)
+    array.push(zUsed, false)
+    array.push(zBox, box.new(bar_index - pivLen, top, bar_index + extendBoxes, bot,
+         bgcolor=color.new(color.aqua, 88), border_color=color.new(color.aqua, 60), border_width=1))
+    f_trimZones()
+
+int zn = array.size(zBox)
+if zn > 0
+    for j = 0 to zn - 1
+        box bx = array.get(zBox, j)
+        if not na(bx)
+            box.set_right(bx, bar_index + extendBoxes)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CANDLE PATTERNS
+// All three detectors are computed every bar. bullPattern / bearPattern are
+// true if any of the three fires — any one is sufficient confluence at a zone.
+// ─────────────────────────────────────────────────────────────────────────────
+bodySize  = math.abs(close - open)
+upperWick = high - math.max(close, open)
+lowerWick = math.min(close, open) - low
+
+// Pin bar / hammer: dominant wick in signal direction, body near top/bottom
+bullPin = lowerWick >= pbWickRatio * math.max(bodySize, syminfo.mintick) and lowerWick >= upperWick * 2.0
+bearPin = upperWick >= pbWickRatio * math.max(bodySize, syminfo.mintick) and upperWick >= lowerWick * 2.0
+
+// Engulfing: current body fully wraps prior body (prior must be opposite colour)
+bullEngulf = close > open and close[1] < open[1] and
+     open <= close[1] and close >= open[1] and
+     (close - open) >= (open[1] - close[1]) * engulfPct
+bearEngulf = close < open and close[1] > open[1] and
+     open >= close[1] and close <= open[1] and
+     (open - close) >= (close[1] - open[1]) * engulfPct
+
+// Inside bar breakout: bar[1] was contained inside bar[2], current breaks it
+iboBull = high[1] <= high[2] and low[1] >= low[2] and close > high[1]
+iboBear = high[1] <= high[2] and low[1] >= low[2] and close < low[1]
+
+bullPattern = bullPin or bullEngulf or iboBull
+bearPattern = bearPin or bearEngulf or iboBear
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENTRY SIGNALS
+// Fires when ALL three conditions align:
+//   1. Price touches a pivot zone during London/NY (inKZ)
+//   2. Correct candle pattern at that zone
+//   3. Ratio safety gate passes (alt not in fundamental breakdown/blowoff)
+// ratioRecoveryLong/Short are set as bonus confluence bools on the same bar.
+// ─────────────────────────────────────────────────────────────────────────────
+var bool sigLong          = false
+var bool sigShort         = false
+var bool sigLongRecovery  = false
+var bool sigShortRecovery = false
+
+sigLong          := false
+sigShort         := false
+sigLongRecovery  := false
+sigShortRecovery := false
+
+canSignal = tfOK and inKZ and hasAsianRef
+
+if canSignal
+    int n = array.size(zTop)
+    if n > 0
+        for k = 0 to n - 1
+            int   i       = (n - 1) - k
+            bool  used    = array.get(zUsed, i)
+            int   dir     = array.get(zDir, i)
+            float zoneTop = array.get(zTop, i)
+            float zoneBot = array.get(zBot, i)
+            bool  touches = low <= zoneTop and high >= zoneBot
+
+            if not used and dir == 1 and touches and bullPattern and ratioSafeLong
+                sigLong         := true
+                sigLongRecovery := ratioRecoveryLong
+                array.set(zUsed, i, true)
+                break
+
+            if not used and dir == -1 and touches and bearPattern and ratioSafeShort
+                sigShort         := true
+                sigShortRecovery := ratioRecoveryShort
+                array.set(zUsed, i, true)
+                break
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VISUALS
+// L / S  = standard signal at zone
+// LR / SR = same signal but with bonus ratio-recovery confluence (higher weight)
+// ─────────────────────────────────────────────────────────────────────────────
+plotshape(showSigs and sigLong  and not sigLongRecovery,  "Long",           shape.triangleup,   location.belowbar, color.new(color.lime,   0), size=size.small,  text="L")
+plotshape(showSigs and sigShort and not sigShortRecovery, "Short",          shape.triangledown, location.abovebar, color.new(color.red,    0), size=size.small,  text="S")
+plotshape(showSigs and sigLongRecovery,                   "Long Recovery",  shape.diamond,      location.belowbar, color.new(color.aqua,   0), size=size.normal, text="LR")
+plotshape(showSigs and sigShortRecovery,                  "Short Recovery", shape.diamond,      location.abovebar, color.new(color.orange, 0), size=size.normal, text="SR")
+
+var label tfLbl = na
+if barstate.islast and allowTF and not tfOK
+    if na(tfLbl)
+        tfLbl := label.new(bar_index, high, "Use 15m–60m chart TF",
+             style=label.style_label_down, color=color.new(color.red, 0), textcolor=color.white, size=size.small)
+    else
+        label.set_xy(tfLbl, bar_index, high)
+else
+    if not na(tfLbl)
+        label.delete(tfLbl)
+        tfLbl := na
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ALERTS
+// ─────────────────────────────────────────────────────────────────────────────
+alertcondition(sigLong,          "Long Signal",          "Long: candle pattern at support zone, ratio safe | " + syminfo.ticker)
+alertcondition(sigShort,         "Short Signal",         "Short: candle pattern at resistance zone, ratio safe | " + syminfo.ticker)
+alertcondition(sigLongRecovery,  "Long Recovery",        "Long Recovery: ratio crossing back from extreme low | " + syminfo.ticker)
+alertcondition(sigShortRecovery, "Short Recovery",       "Short Recovery: ratio crossing back from extreme high | " + syminfo.ticker)
