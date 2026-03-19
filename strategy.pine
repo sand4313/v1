@@ -45,6 +45,8 @@ useSlope = input.bool(true, "Require EMA slope", group=grpTrend)
 grpStruct= "MSS (Market Structure Shift)"
 msLen    = input.int(4, "Swing length (chart TF)", minval=2, maxval=20, group=grpStruct)
 setupTTL = input.int(200, "Setup timeout (bars after sweep)", minval=20, maxval=2000, group=grpStruct)
+sweepMinPct    = input.float(0.05, "Min sweep depth (% past level, 0=off)", minval=0.0, maxval=2.0, step=0.01, group=grpStruct)
+oneSweepPerDay = input.bool(true,  "One sweep per day (ignore opposite sweep)", group=grpStruct)
 
 grpDisp  = "Displacement (Zone creation)"
 atrLen   = input.int(14, "ATR length (chart TF)", minval=5, maxval=100, group=grpDisp)
@@ -183,8 +185,24 @@ plot(showPDHL ? pdl : na, "PDL", color=color.new(color.orange, 65), linewidth=1,
 // ─────────────────────────────────────────────────────────────────────────────
 hasAsianRef = not na(asianHiRef) and not na(asianLoRef) and asianRefDay == dayId()
 
-bslSweep = hasAsianRef and inKZ and high > asianHiRef and close < asianHiRef
-sslSweep = hasAsianRef and inKZ and low  < asianLoRef and close > asianLoRef
+// Fix 1: minimum wick penetration depth past the Asian level
+bslDepthOK = sweepMinPct <= 0.0 or (high - asianHiRef) / asianHiRef * 100.0 >= sweepMinPct
+sslDepthOK = sweepMinPct <= 0.0 or (asianLoRef - low)  / asianLoRef * 100.0 >= sweepMinPct
+
+// Fix 2: track the first sweep direction each day to block opposite sweeps
+var int firstSweepDirToday = 0
+var int firstSweepDirDay   = na
+if na(firstSweepDirDay) or firstSweepDirDay != dayId()
+    firstSweepDirDay   := dayId()
+    firstSweepDirToday := 0
+
+bslSweep = hasAsianRef and inKZ and high > asianHiRef and close < asianHiRef and bslDepthOK and (not oneSweepPerDay or firstSweepDirToday == 0 or firstSweepDirToday == -1)
+sslSweep = hasAsianRef and inKZ and low  < asianLoRef and close > asianLoRef and sslDepthOK and (not oneSweepPerDay or firstSweepDirToday == 0 or firstSweepDirToday == 1)
+
+if bslSweep and firstSweepDirToday == 0
+    firstSweepDirToday := -1
+if sslSweep and firstSweepDirToday == 0
+    firstSweepDirToday := 1
 
 plotshape(showSweep and bslSweep, title="BSL Sweep", style=shape.triangledown, location=location.abovebar, color=color.new(color.yellow, 0), size=size.tiny, text="SW↑")
 plotshape(showSweep and sslSweep, title="SSL Sweep", style=shape.triangleup,   location=location.belowbar, color=color.new(color.yellow, 0), size=size.tiny, text="SW↓")
