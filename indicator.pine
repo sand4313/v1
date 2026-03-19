@@ -300,7 +300,7 @@ else
 // ─────────────────────────────────────────────────────────────────────────────
 // ALERTS
 // ─────────────────────────────────────────────────────────────────────────────
-alertcondition(sigLong,          "Long Signal",          "Long: candle pattern at support zone, ratio safe | " + syminfo.ticker)
-alertcondition(sigShort,         "Short Signal",         "Short: candle pattern at resistance zone, ratio safe | " + syminfo.ticker)
-alertcondition(sigLongRecovery,  "Long Recovery",        "Long Recovery: ratio crossing back from extreme low | " + syminfo.ticker)
-alertcondition(sigShortRecovery, "Short Recovery",       "Short Recovery: ratio crossing back from extreme high | " + syminfo.ticker)
+alertcondition(sigLong,          "Long Signal",          "Long: candle pattern at support zone, ratio safe")
+alertcondition(sigShort,         "Short Signal",         "Short: candle pattern at resistance zone, ratio safe")
+alertcondition(sigLongRecovery,  "Long Recovery",        "Long Recovery: ratio crossing back from extreme low")
+alertcondition(sigShortRecovery, "Short Recovery",       "Short Recovery: ratio crossing back from extreme high")
