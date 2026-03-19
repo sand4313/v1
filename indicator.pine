@@ -31,8 +31,8 @@ ratioLen    = input.int(50,     "Z-score lookback (bars)",   minval=10, maxval=2
 ratioThresh = input.float(2.5,  "Z-score extreme threshold", minval=1.0, maxval=5.0, step=0.1, group=grpRatio)
 
 grpZones    = "Zones"
-pivLen      = input.int(5,   "Pivot swing length", minval=2, maxval=20,    group=grpZones)
-maxZones    = input.int(30,  "Max zones kept",     minval=5, maxval=200,   group=grpZones)
+pivLen      = input.int(10,  "Pivot swing length", minval=2, maxval=20,    group=grpZones)
+maxZones    = input.int(10,  "Max zones kept",     minval=5, maxval=200,   group=grpZones)
 extendBoxes = input.int(250, "Extend boxes (bars)", minval=20, maxval=5000, group=grpZones)
 
 grpCandles  = "Candle Patterns"
@@ -175,7 +175,19 @@ f_trimZones() =>
         array.shift(zDir)
         array.shift(zUsed)
 
-if not na(ph)
+f_hasNearbyZone(price, dir) =>
+    bool found = false
+    int  sz    = array.size(zTop)
+    if sz > 0
+        for i = 0 to sz - 1
+            if array.get(zDir, i) == dir
+                float mid = (array.get(zTop, i) + array.get(zBot, i)) / 2.0
+                if math.abs(mid - price) < atr * 1.5
+                    found := true
+                    break
+    found
+
+if not na(ph) and not f_hasNearbyZone(ph, -1)
     float top = ph + zHalf
     float bot = ph - zHalf
     array.push(zTop,  top)
@@ -186,7 +198,7 @@ if not na(ph)
          bgcolor=color.new(color.red, 88), border_color=color.new(color.red, 60), border_width=1))
     f_trimZones()
 
-if not na(pl)
+if not na(pl) and not f_hasNearbyZone(pl, 1)
     float top = pl + zHalf
     float bot = pl - zHalf
     array.push(zTop,  top)
@@ -196,6 +208,24 @@ if not na(pl)
     array.push(zBox, box.new(bar_index - pivLen, top, bar_index + extendBoxes, bot,
          bgcolor=color.new(color.aqua, 88), border_color=color.new(color.aqua, 60), border_width=1))
     f_trimZones()
+
+// Invalidate zones that price has decisively closed through (full body break)
+if array.size(zTop) > 0
+    for i = array.size(zTop) - 1 to 0 by -1
+        int   dir = array.get(zDir,  i)
+        float top = array.get(zTop,  i)
+        float bot = array.get(zBot,  i)
+        bool  broken = (dir ==  1 and close < bot and open < bot) or
+                       (dir == -1 and close > top and open > top)
+        if broken
+            box bx = array.get(zBox, i)
+            if not na(bx)
+                box.delete(bx)
+            array.remove(zTop,  i)
+            array.remove(zBot,  i)
+            array.remove(zDir,  i)
+            array.remove(zUsed, i)
+            array.remove(zBox,  i)
 
 int zn = array.size(zBox)
 if zn > 0
