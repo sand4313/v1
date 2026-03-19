@@ -196,8 +196,8 @@ if na(firstSweepDirDay) or firstSweepDirDay != dayId()
     firstSweepDirDay   := dayId()
     firstSweepDirToday := 0
 
-bslSweep = hasAsianRef and inKZ and high > asianHiRef and close < asianHiRef and bslDepthOK and (not oneSweepPerDay or firstSweepDirToday == 0 or firstSweepDirToday == -1)
-sslSweep = hasAsianRef and inKZ and low  < asianLoRef and close > asianLoRef and sslDepthOK and (not oneSweepPerDay or firstSweepDirToday == 0 or firstSweepDirToday == 1)
+bslSweep = hasAsianRef and inKZ and high > asianHiRef and close < asianHiRef and bslDepthOK and (not oneSweepPerDay or firstSweepDirToday == 0 or firstSweepDirToday == -1) and trendShortOK
+sslSweep = hasAsianRef and inKZ and low  < asianLoRef and close > asianLoRef and sslDepthOK and (not oneSweepPerDay or firstSweepDirToday == 0 or firstSweepDirToday == 1) and trendLongOK
 
 if bslSweep and firstSweepDirToday == 0
     firstSweepDirToday := -1
