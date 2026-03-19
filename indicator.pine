@@ -210,22 +210,24 @@ if not na(pl) and not f_hasNearbyZone(pl, 1)
     f_trimZones()
 
 // Invalidate zones that price has decisively closed through (full body break)
-if array.size(zTop) > 0
-    for i = array.size(zTop) - 1 to 0 by -1
-        int   dir = array.get(zDir,  i)
-        float top = array.get(zTop,  i)
-        float bot = array.get(zBot,  i)
-        bool  broken = (dir ==  1 and close < bot and open < bot) or
-                       (dir == -1 and close > top and open > top)
-        if broken
-            box bx = array.get(zBox, i)
-            if not na(bx)
-                box.delete(bx)
-            array.remove(zTop,  i)
-            array.remove(zBot,  i)
-            array.remove(zDir,  i)
-            array.remove(zUsed, i)
-            array.remove(zBox,  i)
+// Iterate backwards via while to avoid Pine Script v6 negative-step restriction
+int _izIdx = array.size(zTop) - 1
+while _izIdx >= 0
+    int   _dir = array.get(zDir,  _izIdx)
+    float _top = array.get(zTop,  _izIdx)
+    float _bot = array.get(zBot,  _izIdx)
+    bool  _broken = (_dir ==  1 and close < _bot and open < _bot) or
+                    (_dir == -1 and close > _top and open > _top)
+    if _broken
+        box _bx = array.get(zBox, _izIdx)
+        if not na(_bx)
+            box.delete(_bx)
+        array.remove(zTop,  _izIdx)
+        array.remove(zBot,  _izIdx)
+        array.remove(zDir,  _izIdx)
+        array.remove(zUsed, _izIdx)
+        array.remove(zBox,  _izIdx)
+    _izIdx -= 1
 
 int zn = array.size(zBox)
 if zn > 0
